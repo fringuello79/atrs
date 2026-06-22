@@ -417,35 +417,32 @@
   .cp-track::before {
     content: '';
     position: absolute;
-    top: 16px; left: 0; right: 0;
+    top: 8px; left: 0; right: 0;
     height: 2px;
-    background: rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.08);
   }
   .cp-fill {
     position: absolute;
-    top: 16px; left: 0;
+    top: 8px; left: 0;
     height: 2px;
     background: linear-gradient(90deg, var(--green), var(--teal));
+    box-shadow: 0 0 8px rgba(43,214,106,0.5);
     transition: width 0.6s cubic-bezier(0.22,1,0.36,1);
     z-index: 1;
   }
   .cp-steps { position: relative; z-index: 2; display: flex; justify-content: space-between; gap: 4px; }
-  .cp-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+  .cp-step { display: flex; flex-direction: column; align-items: center; gap: 9px; flex: 1; min-width: 0; }
   .cp-dot {
-    width: 34px; height: 34px;
+    width: 18px; height: 18px;
     border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
     background: var(--navy-deep);
-    border: 2px solid rgba(255,255,255,0.15);
-    color: var(--grey);
-    font-weight: 800;
-    font-size: 13px;
+    border: 2px solid rgba(255,255,255,0.18);
+    box-sizing: border-box;
   }
   .cp-step.done .cp-dot {
+    background: var(--green);
     border-color: var(--green);
-    background: radial-gradient(circle at 30% 30%, rgba(43,214,106,0.3), rgba(43,214,106,0.1));
-    color: var(--green);
-    box-shadow: 0 0 14px rgba(43,214,106,0.25);
+    box-shadow: 0 0 10px rgba(43,214,106,0.6), 0 0 18px rgba(43,214,106,0.3);
   }
   .cp-label {
     font-size: 9.5px;
@@ -461,7 +458,7 @@
   @media (max-width: 600px) {
     .cp-label { font-size: 8px; max-width: 56px; }
     .cp-date { display: none; }
-    .cp-dot { width: 30px; height: 30px; font-size: 12px; }
+    .cp-dot { width: 15px; height: 15px; }
   }
 
   /* Evidenzia gli eventi con classifica disponibile */
@@ -1060,6 +1057,26 @@
     margin-bottom: 10px;
   }
   .rule p, .rule ul { font-size: 13px; line-height: 1.6; color: var(--grey-light); }
+  .rule-card .card-attrs-doc {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .cad {
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(76,215,208,0.15);
+    border-radius: 11px;
+    padding: 12px 14px;
+  }
+  .cad-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--teal);
+    letter-spacing: 0.5px;
+    margin-bottom: 5px;
+  }
+  .cad-desc { font-size: 12px; line-height: 1.55; color: var(--grey-light); }
   .rule ul { list-style: none; padding: 0; }
   .rule ul li { padding: 4px 0; padding-left: 16px; position: relative; }
   .rule ul li::before {
@@ -1390,6 +1407,30 @@
           <li>3. Miglior piazzamento assoluto</li>
         </ul>
       </div>
+    </div>
+
+    <div class="rule rule-card" style="margin-top:14px">
+      <h4>Card Atleta</h4>
+      <p>Aprendo il dettaglio di un atleta con almeno <strong>due gare</strong> disputate compare la sua card, con quattro indicatori (da 0 a 99) calcolati esclusivamente sui risultati ufficiali del circuito. Si affinano col procedere della stagione.</p>
+      <div class="card-attrs-doc">
+        <div class="cad">
+          <div class="cad-name">Competitività</div>
+          <div class="cad-desc">Quanto in alto arriva, in media, nella classifica del proprio genere. Più i piazzamenti sono vicini alla vetta della categoria, più il valore è alto.</div>
+        </div>
+        <div class="cad">
+          <div class="cad-name">Costanza</div>
+          <div class="cad-desc">Quanto sono regolari i piazzamenti tra una gara e l'altra. Chi mantiene posizioni simili in ogni prova ha costanza elevata; chi alterna risultati molto diversi la vede scendere.</div>
+        </div>
+        <div class="cad">
+          <div class="cad-name">Caratura</div>
+          <div class="cad-desc">Il peso dei risultati in base alla concorrenza affrontata. Un buon piazzamento in una gara molto numerosa vale più dello stesso piazzamento in un campo ristretto.</div>
+        </div>
+        <div class="cad">
+          <div class="cad-name">Partecipazione</div>
+          <div class="cad-desc">La presenza al circuito: gare disputate sul totale di quelle già svolte. Chi corre tutte le prove finora disputate è al massimo, indipendentemente dagli eventi ancora in calendario.</div>
+        </div>
+      </div>
+      <p style="margin-top:12px; font-size:12px; color:var(--grey)">Il numero grande in oro indica la <strong>posizione nella classifica di genere</strong> del circuito; i <strong>Punti ATR Series</strong> sono il totale reale accumulato.</p>
     </div>
   </div>
 
@@ -1790,7 +1831,7 @@ function renderProgressBar() {
             const isDone = done[i];
             return `
               <div class="cp-step ${isDone ? 'done' : ''}" title="${ev.name} · ${ev.date}">
-                <div class="cp-dot">${isDone ? '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : (i + 1)}</div>
+                <div class="cp-dot"></div>
                 <div class="cp-label">${ev.name}</div>
                 <div class="cp-date">${ev.date}</div>
               </div>`;
