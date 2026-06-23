@@ -1262,14 +1262,16 @@
   .pc-pts { margin:14px 30px 0; padding:12px; background:rgba(0,0,0,0.28); border:1px solid rgba(43,214,106,0.25); border-radius:13px; display:flex; align-items:center; justify-content:center; gap:9px; position:relative; z-index:1; }
   .pc-pts .v { font-size:26px; font-weight:900; color:var(--green); text-shadow:0 0 16px rgba(43,214,106,0.4); }
   .pc-pts .l { font-size:9px; font-weight:800; letter-spacing:1.2px; color:var(--grey-light); text-transform:uppercase; line-height:1.2; }
-  .pc-attrs { padding:18px 30px 0; display:flex; flex-direction:column; gap:13px; position:relative; z-index:1; }
-  .pc-attr { display:flex; align-items:center; gap:13px; }
-  .pc-attr .val { font-size:23px; font-weight:900; width:38px; text-align:right; color:var(--green); letter-spacing:-1px; }
-  .pc-attr .meta { flex:1; }
-  .pc-attr .nm { font-size:10px; font-weight:800; color:var(--grey-light); text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; }
-  .pc-attr .bar { height:5px; border-radius:3px; background:rgba(255,255,255,0.08); overflow:hidden; }
-  .pc-attr .bar > i { display:block; height:100%; border-radius:3px; background:linear-gradient(90deg,var(--green),var(--teal)); box-shadow:0 0 8px rgba(43,214,106,0.4); }
-  .pc-foot { text-align:center; padding:18px 0 20px; position:relative; z-index:1; }
+  .pc-body { display:flex; align-items:center; gap:6px; padding:20px 22px 10px; position:relative; z-index:1; }
+  .pc-radar { flex-shrink:0; display:flex; justify-content:center; align-items:center; }
+  .pc-attrs { flex:1; display:flex; flex-direction:column; gap:15px; min-width:0; }
+  .pc-attr { display:flex; align-items:center; gap:9px; }
+  .pc-attr .val { font-size:17px; font-weight:900; width:26px; text-align:right; color:var(--green); letter-spacing:-0.5px; }
+  .pc-attr .meta { flex:1; min-width:0; }
+  .pc-attr .nm { font-size:8.5px; font-weight:800; color:var(--grey-light); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:5px; }
+  .pc-attr .bar { height:4px; border-radius:2px; background:rgba(255,255,255,0.08); overflow:hidden; }
+  .pc-attr .bar > i { display:block; height:100%; border-radius:2px; background:linear-gradient(90deg,var(--green),var(--teal)); box-shadow:0 0 8px rgba(43,214,106,0.4); }
+  .pc-foot { text-align:center; padding:22px 0 22px; position:relative; z-index:1; }
   .pc-foot .tag { font-size:9.5px; font-weight:800; letter-spacing:2px; color:var(--grey); text-transform:uppercase; }
   .pc-foot .ig { font-size:10.5px; color:var(--grey-light); margin-top:4px; }
   .pc-share-btn {
@@ -2466,6 +2468,38 @@ function toTitle(s) {
   return String(s || '').toLowerCase().replace(/(^|[\s'-])([a-zà-ù])/g, (m, p, c) => p + c.toUpperCase());
 }
 
+// Overall (Punti ATR) normalizzato 0-99 sul min-max della classifica di genere attuale.
+function normalizedOverall(a) {
+  const peers = buildRanking().filter(x => x.gender === a.gender);
+  if (peers.length === 0) return 99;
+  const pts = peers.map(x => x.totalPoints);
+  const mn = Math.min(...pts), mx = Math.max(...pts);
+  if (mx <= mn) return 99;
+  return Math.round(99 * (a.totalPoints - mn) / (mx - mn));
+}
+
+// SVG del radar pentagonale. 5 valori in ordine ORARIO dal vertice superiore:
+// Punti (overall normalizzato), Competitività, Costanza, Caratura, Partecipazione.
+function radarPentagonSVG(values) {
+  const labels = ['PUNTI', 'COMPET.', 'COSTANZA', 'CARATURA', 'PARTEC.'];
+  const SIZE = 90, cx = SIZE/2, cy = SIZE/2, R = 26;
+  const pt = (i, frac) => { const ang = (-90 + i*72) * Math.PI/180; return [cx + R*frac*Math.cos(ang), cy + R*frac*Math.sin(ang)]; };
+  const poly = frac => 'M ' + [0,1,2,3,4].map(i => { const [x,y] = pt(i, frac); return x.toFixed(1)+','+y.toFixed(1); }).join(' L ') + ' Z';
+  let grid = ''; [0.25,0.5,0.75,1].forEach(f => grid += `<path d="${poly(f)}" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>`);
+  let axes = ''; for (let i=0;i<5;i++){ const [x,y] = pt(i,1); axes += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>`; }
+  const vp = values.map((v,i) => pt(i, Math.max(v,2)/100));
+  const vpath = 'M ' + vp.map(([x,y]) => x.toFixed(1)+','+y.toFixed(1)).join(' L ') + ' Z';
+  let dots = ''; vp.forEach(([x,y]) => dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2" fill="#2BD66A"/>`);
+  let labs = ''; labels.forEach((lb,i) => { const [x,y] = pt(i,1.42); labs += `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" fill="#7A86B0" font-size="5.5" font-weight="800" font-family="Figtree" text-anchor="middle" dominant-baseline="middle" letter-spacing="0.4">${lb}</text>`; });
+  return `<svg width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
+    <defs><linearGradient id="rgrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2BD66A"/><stop offset="1" stop-color="#4CD7D0"/></linearGradient>
+    <filter id="rglow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    ${grid}${axes}
+    <path d="${vpath}" fill="url(#rgrad)" fill-opacity="0.25" stroke="url(#rgrad)" stroke-width="2" filter="url(#rglow)"/>
+    ${dots}${labs}
+  </svg>`;
+}
+
 function renderAthleteCardBlock(a) {
   const stats = computeAthleteStats(a);
   if (!stats) return '';
@@ -2477,6 +2511,8 @@ function renderAthleteCardBlock(a) {
     ['Caratura', stats.caratura],
     ['Partecipazione', stats.partecipazione],
   ];
+  // valori del pentagono: overall normalizzato + i 4 attributi
+  const radarVals = [normalizedOverall(a), stats.competitivita, stats.costanza, stats.caratura, stats.partecipazione];
   return `
     <div class="ac-card-shell">
       <div class="atr-pcard" id="${cardId}">
@@ -2499,15 +2535,18 @@ function renderAthleteCardBlock(a) {
             <span class="v">${a.totalPoints}</span>
             <span class="l">Punti<br>ATR Series</span>
           </div>
-          <div class="pc-attrs">
-            ${attrs.map(([nm, val]) => `
-              <div class="pc-attr">
-                <span class="val">${val}</span>
-                <div class="meta">
-                  <div class="nm">${nm}</div>
-                  <div class="bar"><i style="width:${val}%"></i></div>
-                </div>
-              </div>`).join('')}
+          <div class="pc-body">
+            <div class="pc-radar">${radarPentagonSVG(radarVals)}</div>
+            <div class="pc-attrs">
+              ${attrs.map(([nm, val]) => `
+                <div class="pc-attr">
+                  <span class="val">${val}</span>
+                  <div class="meta">
+                    <div class="nm">${nm}</div>
+                    <div class="bar"><i style="width:${val}%"></i></div>
+                  </div>
+                </div>`).join('')}
+            </div>
           </div>
           <div class="pc-foot">
             <div class="tag">abruzzotrailrun.it</div>
@@ -2662,31 +2701,38 @@ async function shareAthleteCard(athleteKeyStr, displayName) {
   ctx.fillText('ATR SERIES', cx + 60, y + boxH/2 + 26);
   y += boxH + 110;
 
-  // ATTRIBUTI
+  // ATTRIBUTI + PENTAGONO affiancati (pentagono a sinistra, valori a destra)
   const attrs = [
     ['Competitività', stats.competitivita],
     ['Costanza', stats.costanza],
     ['Caratura', stats.caratura],
     ['Partecipazione', stats.partecipazione],
   ];
-  const aX = ip + 60, barW = W - ip*2 - 240;
-  attrs.forEach(([nm, val]) => {
-    ctx.fillStyle = '#2BD66A'; ctx.font = `900 64px ${FONT}`; ctx.textAlign = 'right';
-    ctx.fillText(String(val), aX + 90, y + 24);
-    ctx.fillStyle = '#AEB8DC'; ctx.font = `800 28px ${FONT}`; ctx.textAlign = 'left';
-    ctx.fillText(nm.toUpperCase(), aX + 130, y - 8);
-    // barra
-    const barY = y + 18, barX = aX + 130;
-    roundRect(ctx, barX, barY, barW, 14, 7);
-    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fill();
-    const fillGrad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
-    fillGrad.addColorStop(0, '#2BD66A'); fillGrad.addColorStop(1, '#4CD7D0');
-    roundRect(ctx, barX, barY, barW * (val/100), 14, 7);
-    ctx.fillStyle = fillGrad; ctx.fill();
-    y += 150;
-  });
+  const radarVals = [normalizedOverall(a), stats.competitivita, stats.costanza, stats.caratura, stats.partecipazione];
 
-  y += 60;
+  // pentagono a sinistra (più piccolo)
+  const radarCx = ip + 215, radarCy = y + 210, radarR = 92;
+  drawRadarPentagon(ctx, radarCx, radarCy, radarR, radarVals);
+
+  // attributi a destra (più piccoli e distanziati verticalmente)
+  const aX = ip + 410, barW = W - ip - aX - 90;
+  let ay = y + 40;
+  attrs.forEach(([nm, val]) => {
+    ctx.fillStyle = '#2BD66A'; ctx.font = `900 50px ${FONT}`; ctx.textAlign = 'right';
+    ctx.fillText(String(val), aX + 60, ay + 20);
+    ctx.fillStyle = '#AEB8DC'; ctx.font = `800 23px ${FONT}`; ctx.textAlign = 'left';
+    ctx.fillText(nm.toUpperCase(), aX + 90, ay - 4);
+    const barY = ay + 14, barX = aX + 90, bw = barW;
+    roundRect(ctx, barX, barY, bw, 11, 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fill();
+    const fillGrad = ctx.createLinearGradient(barX, 0, barX + bw, 0);
+    fillGrad.addColorStop(0, '#2BD66A'); fillGrad.addColorStop(1, '#4CD7D0');
+    roundRect(ctx, barX, barY, bw * (val/100), 11, 5);
+    ctx.fillStyle = fillGrad; ctx.fill();
+    ay += 112;
+  });
+  y += 540;
+
   // FOOTER
   ctx.textAlign = 'center';
   ctx.fillStyle = '#7A86B0'; ctx.font = `800 26px ${FONT}`;
@@ -2724,6 +2770,36 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y, x+w, y, r);
   ctx.closePath();
 }
+
+// helper: disegna il radar pentagonale sul canvas (per il PNG condivisibile)
+function drawRadarPentagon(ctx, cx, cy, R, values) {
+  const labels = ['PUNTI', 'COMPET.', 'COSTANZA', 'CARATURA', 'PARTEC.'];
+  const pt = (i, frac) => { const ang = (-90 + i*72) * Math.PI/180; return [cx + R*frac*Math.cos(ang), cy + R*frac*Math.sin(ang)]; };
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1.5;
+  [0.25,0.5,0.75,1].forEach(f => {
+    ctx.beginPath();
+    for (let i=0;i<5;i++){ const [x,y] = pt(i,f); i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); }
+    ctx.closePath(); ctx.stroke();
+  });
+  for (let i=0;i<5;i++){ const [x,y] = pt(i,1); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x,y); ctx.stroke(); }
+  const vp = values.map((v,i) => pt(i, Math.max(v,2)/100));
+  ctx.beginPath();
+  vp.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(cx-R, cy-R, cx+R, cy+R);
+  grad.addColorStop(0, '#2BD66A'); grad.addColorStop(1, '#4CD7D0');
+  ctx.fillStyle = grad; ctx.globalAlpha = 0.25; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = grad; ctx.lineWidth = 4;
+  ctx.shadowColor = 'rgba(43,214,106,0.5)'; ctx.shadowBlur = 12;
+  ctx.stroke(); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#2BD66A';
+  vp.forEach(([x,y]) => { ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); });
+  ctx.fillStyle = '#7A86B0'; ctx.font = '800 18px Figtree, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  labels.forEach((lb,i) => { const [x,y] = pt(i,1.4); ctx.fillText(lb, x, y); });
+  ctx.textBaseline = 'alphabetic';
+}
+
 // helper: carica immagine come Promise
 function loadImage(src) {
   return new Promise((resolve, reject) => {
