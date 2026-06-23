@@ -1241,6 +1241,11 @@
     background:linear-gradient(105deg, transparent, rgba(255,255,255,0.06), transparent);
     transform:skewX(-12deg); pointer-events:none;
   }
+  .atr-pcard-inner::after {
+    content:''; position:absolute; top:0; right:-6%; width:40%; height:62%;
+    background:linear-gradient(90deg, transparent 42%, rgba(255,255,255,0.16) 49%, rgba(255,255,255,0.05) 54%, transparent 64%);
+    transform:skewX(-12deg); transform-origin:top right; pointer-events:none; z-index:0;
+  }
   .pc-gender {
     position:absolute; top:18px; right:18px; z-index:3;
     width:36px; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center;
@@ -1507,9 +1512,13 @@ const TROPHY_IMG = 'assets/trofeo.jpg';
 // Logo del circuito per la card atleta: lo riuso dall'header (già incorporato come base64),
 // così non duplico l'immagine. Risolto all'avvio.
 let LOGO_IMG = '';
+let LOGO_OBJ = null; // immagine logo precaricata: serve a generare il PNG senza await (mobile share)
 function initLogoImg() {
   const img = document.querySelector('.brand-logo');
-  if (img && img.src) LOGO_IMG = img.src;
+  if (img && img.src) {
+    LOGO_IMG = img.src;
+    loadImage(LOGO_IMG).then(im => { LOGO_OBJ = im; }).catch(() => {});
+  }
 }
 
 const RACE_MAP = {};
@@ -2307,6 +2316,8 @@ function renderRanking() {
   if (listEl && !listEl.dataset.delegated) {
     listEl.dataset.delegated = '1';
     listEl.addEventListener('click', (e) => {
+      // Il pulsante "Condividi" non deve chiudere/collassare la card
+      if (e.target.closest('.pc-share-btn')) return;
       // Desktop: click su una riga atleta
       const row = e.target.closest('tr.athlete-main');
       if (row) { toggleDetail(row); return; }
@@ -2593,8 +2604,8 @@ async function shareAthleteCard(athleteKeyStr, displayName) {
   const cardEl = document.getElementById('card_' + a.key.replace(/[^a-zA-Z0-9]/g, '_'));
   if (!cardEl) return;
 
-  // assicura il font caricato prima di misurare/disegnare
-  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+  // Niente await qui: il font è già caricato (la card è visibile con Figtree) e
+  // un await prima di navigator.share farebbe scadere l'attivazione utente su mobile.
 
   const cardRect = cardEl.getBoundingClientRect();
   const W = 1080;
@@ -2687,16 +2698,27 @@ async function shareAthleteCard(athleteKeyStr, displayName) {
   const sh = ctx.createLinearGradient(bL, 0, bL + bW, 0);
   sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(0.5, 'rgba(255,255,255,0.06)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = sh; ctx.fillRect(bL, iy - ih, bW, ih * 3); ctx.restore();
+  // riflesso NETTO in alto a destra — ::after right:-6% width:40% height:62% skewX(-12deg)
+  ctx.save();
+  ctx.transform(1, 0, ksk, 1, -ksk * cyc, 0);
+  const aR = ix + iw * 1.06, aW = iw * 0.40, aL = aR - aW;
+  const ar = ctx.createLinearGradient(aL, 0, aR, 0);
+  ar.addColorStop(0.00, 'rgba(255,255,255,0)');
+  ar.addColorStop(0.42, 'rgba(255,255,255,0)');
+  ar.addColorStop(0.49, 'rgba(255,255,255,0.16)');
+  ar.addColorStop(0.54, 'rgba(255,255,255,0.05)');
+  ar.addColorStop(0.64, 'rgba(255,255,255,0)');
+  ar.addColorStop(1.00, 'rgba(255,255,255,0)');
+  ctx.fillStyle = ar; ctx.fillRect(aL, iy - ih * 0.4, aW, ih * 0.62 + ih * 0.4); ctx.restore();
   ctx.restore(); // fine clip
 
   // ===================== LOGO =====================
   const logoImg = cardEl.querySelector('.pc-logo-wrap img');
-  if (logoImg && LOGO_IMG) {
+  if (logoImg && LOGO_OBJ) {
     try {
-      const im = await loadImage(LOGO_IMG);
       const lr = rel(logoImg);
       ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 10 * S; ctx.shadowOffsetY = 2 * S;
-      ctx.drawImage(im, lr.x, lr.y, lr.w, lr.h);
+      ctx.drawImage(LOGO_OBJ, lr.x, lr.y, lr.w, lr.h);
       ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
     } catch (e) {}
   }
@@ -2794,7 +2816,13 @@ async function shareAthleteCard(athleteKeyStr, displayName) {
   if (igEl) drawText(igEl, { align: 'center' });
 
   // ===================== ESPORTA =====================
-  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  // Conversione SINCRONA (nessun await prima di navigator.share): così su mobile
+  // resta valida l'attivazione utente e la condivisione parte davvero.
+  const dataUrl = cv.toDataURL('image/png');
+  const bin = atob(dataUrl.split(',')[1]);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const blob = new Blob([u8], { type: 'image/png' });
   const fileName = `ATRS_${(displayName || 'atleta').replace(/\s+/g, '_')}.png`;
   const file = new File([blob], fileName, { type: 'image/png' });
 
@@ -2887,8 +2915,7 @@ document.addEventListener('click', (e) => {
     // ricostruisco: cerco l'atleta il cui key sanitizzato combacia
     key = Object.keys(athletesByKey).find(k => 'card_' + k.replace(/[^a-zA-Z0-9]/g, '_') === cardId);
   }
-  Promise.resolve()
-    .then(() => key ? shareAthleteCard(key, name) : null)
+  (key ? shareAthleteCard(key, name) : Promise.resolve())
     .catch(err => console.warn('Condivisione fallita:', err))
     .finally(() => { btn.disabled = false; btn.style.opacity = '1'; btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg> Condividi su Instagram`; });
 });
