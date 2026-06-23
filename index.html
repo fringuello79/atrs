@@ -2623,14 +2623,46 @@ async function shareAthleteCard(athleteKeyStr, displayName) {
   bgGrad.addColorStop(1, '#070E33');
   ctx.fillStyle = bgGrad;
   ctx.fill();
-  // glow verde in alto
-  ctx.save(); ctx.clip();
-  const topGlow = ctx.createRadialGradient(W/2, ip, 50, W/2, ip, 600);
-  topGlow.addColorStop(0, 'rgba(43,214,106,0.22)');
-  topGlow.addColorStop(1, 'rgba(43,214,106,0)');
-  ctx.fillStyle = topGlow;
-  ctx.fillRect(ip, ip, W-ip*2, 700);
+  // strati interni come la preview: alone verde dall'alto, teal dal basso, riflesso diagonale
+  ctx.save(); ctx.clip(); // clip alla card interna (path = roundRect interno)
+  const Wi = W - ip*2, Hi = H - ip*2;
+
+  // 1) alone verde dall'alto — ellipse 130% 55% at 50% -8%, 0.22 -> trasparente al 55%
+  ctx.save();
+  ctx.translate(ip + Wi*0.5, ip + Hi*(-0.08));
+  ctx.scale(Wi*1.30, Hi*0.55);
+  const gTop = ctx.createRadialGradient(0,0,0, 0,0,1);
+  gTop.addColorStop(0, 'rgba(43,214,106,0.22)');
+  gTop.addColorStop(0.55, 'rgba(43,214,106,0)');
+  ctx.fillStyle = gTop; ctx.fillRect(-1,-1,2,2);
   ctx.restore();
+
+  // 2) alone teal dal basso — ellipse 90% 40% at 50% 108%, 0.14 -> trasparente al 60%
+  ctx.save();
+  ctx.translate(ip + Wi*0.5, ip + Hi*1.08);
+  ctx.scale(Wi*0.90, Hi*0.40);
+  const gBot = ctx.createRadialGradient(0,0,0, 0,0,1);
+  gBot.addColorStop(0, 'rgba(76,215,208,0.14)');
+  gBot.addColorStop(0.60, 'rgba(76,215,208,0)');
+  ctx.fillStyle = gBot; ctx.fillRect(-1,-1,2,2);
+  ctx.restore();
+
+  // 3) riflesso diagonale a sinistra — ::before: left:-40% width:50%, skewX(-12deg),
+  //    linear-gradient(105deg, transparent, rgba(255,255,255,0.06), transparent)
+  ctx.save();
+  const cyc = ip + Hi/2;
+  const k = Math.tan(-12 * Math.PI/180);   // skewX(-12deg) attorno a y=cyc
+  ctx.transform(1, 0, k, 1, -k*cyc, 0);
+  const bandLeft = ip - Wi*0.40, bandW = Wi*0.50;
+  const sheen = ctx.createLinearGradient(bandLeft, 0, bandLeft + bandW, 0);
+  sheen.addColorStop(0, 'rgba(255,255,255,0)');
+  sheen.addColorStop(0.5, 'rgba(255,255,255,0.06)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(bandLeft, ip - Hi, bandW, Hi*3);
+  ctx.restore();
+
+  ctx.restore(); // fine clip card interna
 
   const cx = W/2;
   let y = ip + 90;
@@ -2717,7 +2749,8 @@ async function shareAthleteCard(athleteKeyStr, displayName) {
   drawRadarPentagon(ctx, radarCx, radarCy, radarR, radarVals);
 
   // attributi a destra (più piccoli e distanziati verticalmente)
-  const aX = ip + 410, barW = W - ip - aX - 90;
+  const RIGHT_MARGIN = 60; // margine destro: le barre non toccano il bordo della card (allineate al box PUNTI)
+  const aX = ip + 410, barW = W - ip - aX - 90 - RIGHT_MARGIN;
   let ay = y + 40;
   attrs.forEach(([nm, val]) => {
     ctx.fillStyle = '#2BD66A'; ctx.font = `900 50px ${FONT}`; ctx.textAlign = 'right';
