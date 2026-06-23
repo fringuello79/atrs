@@ -2588,197 +2588,214 @@ async function shareAthleteCard(athleteKeyStr, displayName) {
   if (!a) return;
   const stats = computeAthleteStats(a);
   if (!stats) return;
-  const rank = circuitGenderRank(a);
 
-  const W = 1080, H = 1920;
+  // Riferimento alla card REALE già renderizzata nel DOM: la ridisegniamo in scala 1:1
+  const cardEl = document.getElementById('card_' + a.key.replace(/[^a-zA-Z0-9]/g, '_'));
+  if (!cardEl) return;
+
+  // assicura il font caricato prima di misurare/disegnare
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+
+  const cardRect = cardEl.getBoundingClientRect();
+  const W = 1080;
+  const S = W / cardRect.width;            // scala basata sulla larghezza reale della card
+  const H = Math.round(cardRect.height * S); // stessa proporzione della preview
+
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  const FONT = 'Figtree, sans-serif';
 
-  // assicura che il font sia caricato prima di disegnare
-  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
+  // ---- helper di misura/stile relativi alla card ----
+  const rel = (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: (r.left - cardRect.left) * S, y: (r.top - cardRect.top) * S, w: r.width * S, h: r.height * S };
+  };
+  const cs = (el) => getComputedStyle(el);
+  const px = (v) => parseFloat(v) || 0;
+  const txt = (el) => {
+    const t = (el.textContent || '').trim();
+    const tr = cs(el).textTransform;
+    return tr === 'uppercase' ? t.toUpperCase() : tr === 'lowercase' ? t.toLowerCase() : t;
+  };
+  const setLS = (el) => {
+    const ls = cs(el).letterSpacing;
+    try { ctx.letterSpacing = (ls && ls !== 'normal') ? (px(ls) * S) + 'px' : '0px'; } catch (e) {}
+  };
+  // disegna il testo di un elemento DOM esattamente dove e come sta, in scala
+  const drawText = (el, opts = {}) => {
+    const r = rel(el), st = cs(el);
+    ctx.font = `${st.fontWeight} ${px(st.fontSize) * S}px Figtree, sans-serif`;
+    ctx.fillStyle = opts.color || st.color;
+    ctx.textBaseline = 'middle';
+    setLS(el);
+    const align = opts.align || st.textAlign;
+    let x;
+    if (align === 'right' || align === 'end') { ctx.textAlign = 'right'; x = r.x + r.w; }
+    else if (align === 'center') { ctx.textAlign = 'center'; x = r.x + r.w / 2; }
+    else { ctx.textAlign = 'left'; x = r.x; }
+    if (opts.shadow) { ctx.shadowColor = opts.shadow; ctx.shadowBlur = (opts.blur || 0) * S; }
+    ctx.fillText(opts.text != null ? opts.text : txt(el), x, r.y + r.h / 2);
+    ctx.shadowBlur = 0;
+    try { ctx.letterSpacing = '0px'; } catch (e) {}
+  };
 
-  // sfondo con cornice neon verde
-  const pad = 34;
-  // glow esterno
-  ctx.fillStyle = '#05081c';
-  ctx.fillRect(0, 0, W, H);
-  // cornice gradiente
-  roundRect(ctx, pad/2, pad/2, W-pad, H-pad, 70);
-  const frameGrad = ctx.createLinearGradient(0, 0, W, H);
-  frameGrad.addColorStop(0, 'rgba(43,214,106,0.95)');
-  frameGrad.addColorStop(0.4, 'rgba(43,214,106,0.3)');
-  frameGrad.addColorStop(1, 'rgba(76,215,208,0.55)');
-  ctx.fillStyle = frameGrad;
-  ctx.shadowColor = 'rgba(43,214,106,0.5)'; ctx.shadowBlur = 60;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  // interno
-  const ip = pad/2 + 14;
-  roundRect(ctx, ip, ip, W-ip*2, H-ip*2, 58);
-  const bgGrad = ctx.createLinearGradient(0, ip, 0, H-ip);
-  bgGrad.addColorStop(0, '#15265C');
-  bgGrad.addColorStop(0.5, '#0C1640');
-  bgGrad.addColorStop(1, '#070E33');
-  ctx.fillStyle = bgGrad;
-  ctx.fill();
-  // strati interni come la preview: alone verde dall'alto, teal dal basso, riflesso diagonale
-  ctx.save(); ctx.clip(); // clip alla card interna (path = roundRect interno)
-  const Wi = W - ip*2, Hi = H - ip*2;
+  // ===================== SFONDO: cornice + interno + aloni + riflesso =====================
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0A1430'; ctx.fillRect(0, 0, W, H); // dietro gli angoli arrotondati
 
-  // 1) alone verde dall'alto — ellipse 130% 55% at 50% -8%, 0.22 -> trasparente al 55%
+  // .atr-pcard: gradiente cornice 165deg, raggio 30
+  roundRect(ctx, 0, 0, W, H, 30 * S);
+  {
+    const th = 165 * Math.PI / 180;
+    const dx = Math.sin(th), dy = -Math.cos(th);
+    const L = Math.abs(W * Math.sin(th)) + Math.abs(H * Math.cos(th));
+    const ccx = W / 2, ccy = H / 2;
+    const fg = ctx.createLinearGradient(ccx - dx * L / 2, ccy - dy * L / 2, ccx + dx * L / 2, ccy + dy * L / 2);
+    fg.addColorStop(0, 'rgba(43,214,106,0.9)');
+    fg.addColorStop(0.4, 'rgba(43,214,106,0.25)');
+    fg.addColorStop(1, 'rgba(76,215,208,0.5)');
+    ctx.fillStyle = fg; ctx.fill();
+  }
+
+  // .atr-pcard-inner: inset padding 5px, raggio 25
+  const pdg = 5 * S;
+  const ix = pdg, iy = pdg, iw = W - pdg * 2, ih = H - pdg * 2;
+  roundRect(ctx, ix, iy, iw, ih, 25 * S);
+  {
+    const bg = ctx.createLinearGradient(0, iy, 0, iy + ih);
+    bg.addColorStop(0, '#15265C'); bg.addColorStop(0.5, '#0C1640'); bg.addColorStop(1, '#070E33');
+    ctx.fillStyle = bg; ctx.fill();
+  }
+  ctx.save(); ctx.clip(); // clip all'interno della card
+  // alone verde dall'alto — ellipse 130% 55% at 50% -8%
   ctx.save();
-  ctx.translate(ip + Wi*0.5, ip + Hi*(-0.08));
-  ctx.scale(Wi*1.30, Hi*0.55);
-  const gTop = ctx.createRadialGradient(0,0,0, 0,0,1);
-  gTop.addColorStop(0, 'rgba(43,214,106,0.22)');
-  gTop.addColorStop(0.55, 'rgba(43,214,106,0)');
-  ctx.fillStyle = gTop; ctx.fillRect(-1,-1,2,2);
-  ctx.restore();
-
-  // 2) alone teal dal basso — ellipse 90% 40% at 50% 108%, 0.14 -> trasparente al 60%
+  ctx.translate(ix + iw * 0.5, iy + ih * (-0.08)); ctx.scale(iw * 1.30, ih * 0.55);
+  const gT = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  gT.addColorStop(0, 'rgba(43,214,106,0.22)'); gT.addColorStop(0.55, 'rgba(43,214,106,0)');
+  ctx.fillStyle = gT; ctx.fillRect(-1, -1, 2, 2); ctx.restore();
+  // alone teal dal basso — ellipse 90% 40% at 50% 108%
   ctx.save();
-  ctx.translate(ip + Wi*0.5, ip + Hi*1.08);
-  ctx.scale(Wi*0.90, Hi*0.40);
-  const gBot = ctx.createRadialGradient(0,0,0, 0,0,1);
-  gBot.addColorStop(0, 'rgba(76,215,208,0.14)');
-  gBot.addColorStop(0.60, 'rgba(76,215,208,0)');
-  ctx.fillStyle = gBot; ctx.fillRect(-1,-1,2,2);
-  ctx.restore();
-
-  // 3) riflesso diagonale a sinistra — ::before: left:-40% width:50%, skewX(-12deg),
-  //    linear-gradient(105deg, transparent, rgba(255,255,255,0.06), transparent)
+  ctx.translate(ix + iw * 0.5, iy + ih * 1.08); ctx.scale(iw * 0.90, ih * 0.40);
+  const gB = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+  gB.addColorStop(0, 'rgba(76,215,208,0.14)'); gB.addColorStop(0.60, 'rgba(76,215,208,0)');
+  ctx.fillStyle = gB; ctx.fillRect(-1, -1, 2, 2); ctx.restore();
+  // riflesso diagonale a sinistra — ::before left:-40% width:50% skewX(-12deg)
   ctx.save();
-  const cyc = ip + Hi/2;
-  const k = Math.tan(-12 * Math.PI/180);   // skewX(-12deg) attorno a y=cyc
-  ctx.transform(1, 0, k, 1, -k*cyc, 0);
-  const bandLeft = ip - Wi*0.40, bandW = Wi*0.50;
-  const sheen = ctx.createLinearGradient(bandLeft, 0, bandLeft + bandW, 0);
-  sheen.addColorStop(0, 'rgba(255,255,255,0)');
-  sheen.addColorStop(0.5, 'rgba(255,255,255,0.06)');
-  sheen.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = sheen;
-  ctx.fillRect(bandLeft, ip - Hi, bandW, Hi*3);
-  ctx.restore();
+  const cyc = iy + ih / 2, ksk = Math.tan(-12 * Math.PI / 180);
+  ctx.transform(1, 0, ksk, 1, -ksk * cyc, 0);
+  const bL = ix - iw * 0.40, bW = iw * 0.50;
+  const sh = ctx.createLinearGradient(bL, 0, bL + bW, 0);
+  sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(0.5, 'rgba(255,255,255,0.06)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sh; ctx.fillRect(bL, iy - ih, bW, ih * 3); ctx.restore();
+  ctx.restore(); // fine clip
 
-  ctx.restore(); // fine clip card interna
-
-  const cx = W/2;
-  let y = ip + 90;
-
-  // LOGO (riuso l'immagine dell'header)
-  if (LOGO_IMG) {
+  // ===================== LOGO =====================
+  const logoImg = cardEl.querySelector('.pc-logo-wrap img');
+  if (logoImg && LOGO_IMG) {
     try {
-      const logo = await loadImage(LOGO_IMG);
-      const lw = 400, lh = lw * (logo.height/logo.width);
-      // scritta centrata: scudo sporge a sinistra -> sposto il logo a sinistra
-      const logoX = cx - lw/2 - 150;
-      ctx.drawImage(logo, logoX, y, lw, lh);
-      y += lh + 30;
-    } catch (e) { y += 60; }
+      const im = await loadImage(LOGO_IMG);
+      const lr = rel(logoImg);
+      ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 10 * S; ctx.shadowOffsetY = 2 * S;
+      ctx.drawImage(im, lr.x, lr.y, lr.w, lr.h);
+      ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    } catch (e) {}
   }
-  // Season 2026
-  ctx.fillStyle = '#7A86B0'; ctx.textAlign = 'center';
-  ctx.font = `800 24px ${FONT}`;
-  ctx.fillText('S E A S O N   2 0 2 6', cx, y);
-  y += 120;
 
-  // badge genere in alto a destra
-  const g = a.gender || 'M';
-  const bx = W - ip - 110, by = ip + 40, bs = 92;
-  roundRect(ctx, bx, by, bs, bs, 22);
-  ctx.fillStyle = g === 'F' ? 'rgba(255,77,109,0.22)' : 'rgba(76,215,208,0.22)';
-  ctx.fill();
-  ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  roundRect(ctx, bx, by, bs, bs, 22); ctx.stroke();
-  ctx.fillStyle = g === 'F' ? '#FF4D6D' : '#4CD7D0';
-  ctx.font = `800 42px ${FONT}`; ctx.textAlign = 'center';
-  ctx.fillText(g, bx + bs/2, by + bs/2 + 15);
+  // ===================== SEASON =====================
+  const seasonEl = cardEl.querySelector('.pc-season');
+  if (seasonEl) drawText(seasonEl);
 
-  // NOME
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#F4F7FF'; ctx.font = `900 92px ${FONT}`;
-  ctx.fillText(a.familyName.toUpperCase(), cx, y);
-  y += 80;
-  ctx.fillStyle = '#4CD7D0'; ctx.font = `700 70px ${FONT}`;
-  ctx.fillText(toTitle(a.firstName), cx, y);
-  y += 56;
-  if (a.team) {
-    ctx.fillStyle = '#AEB8DC'; ctx.font = `400 30px ${FONT}`;
-    ctx.fillText(a.team, cx, y);
+  // ===================== BADGE GENERE =====================
+  const gEl = cardEl.querySelector('.pc-gender');
+  if (gEl) {
+    const gr = rel(gEl), gst = cs(gEl), grad = px(gst.borderTopLeftRadius) * S;
+    roundRect(ctx, gr.x, gr.y, gr.w, gr.h, grad);
+    ctx.fillStyle = gst.backgroundColor; ctx.fill();
+    ctx.lineWidth = (px(gst.borderTopWidth) || 2) * S; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    roundRect(ctx, gr.x, gr.y, gr.w, gr.h, grad); ctx.stroke();
+    drawText(gEl, { align: 'center' });
   }
-  y += 130;
 
-  // POSIZIONE protagonista
-  ctx.fillStyle = '#FFC940'; ctx.font = `900 150px ${FONT}`;
-  ctx.shadowColor = 'rgba(255,201,64,0.4)'; ctx.shadowBlur = 40;
-  ctx.fillText(rank ? rank + '°' : '—', cx, y);
-  ctx.shadowBlur = 0;
-  y += 56;
-  ctx.fillStyle = '#AEB8DC'; ctx.font = `700 30px ${FONT}`;
-  ctx.fillText('N E L   C I R C U I T O', cx, y);
-  y += 100;
-
-  // PUNTI box
-  const boxW = W - ip*2 - 120, boxX = cx - boxW/2, boxH = 120;
-  roundRect(ctx, boxX, y, boxW, boxH, 28);
-  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
-  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(43,214,106,0.25)';
-  roundRect(ctx, boxX, y, boxW, boxH, 28); ctx.stroke();
-  ctx.fillStyle = '#2BD66A'; ctx.font = `900 66px ${FONT}`; ctx.textAlign = 'center';
-  ctx.shadowColor = 'rgba(43,214,106,0.4)'; ctx.shadowBlur = 24;
-  ctx.fillText(String(a.totalPoints), cx - 40, y + boxH/2 + 22);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#AEB8DC'; ctx.font = `800 24px ${FONT}`; ctx.textAlign = 'left';
-  ctx.fillText('PUNTI', cx + 60, y + boxH/2 - 4);
-  ctx.fillText('ATR SERIES', cx + 60, y + boxH/2 + 26);
-  y += boxH + 110;
-
-  // ATTRIBUTI + PENTAGONO affiancati (pentagono a sinistra, valori a destra)
-  const attrs = [
-    ['Competitività', stats.competitivita],
-    ['Costanza', stats.costanza],
-    ['Caratura', stats.caratura],
-    ['Partecipazione', stats.partecipazione],
-  ];
-  const radarVals = [normalizedOverall(a), stats.competitivita, stats.costanza, stats.caratura, stats.partecipazione];
-
-  // pentagono a sinistra (più piccolo)
-  const radarCx = ip + 215, radarCy = y + 210, radarR = 92;
-  drawRadarPentagon(ctx, radarCx, radarCy, radarR, radarVals);
-
-  // attributi a destra (più piccoli e distanziati verticalmente)
-  const RIGHT_MARGIN = 60; // margine destro: le barre non toccano il bordo della card (allineate al box PUNTI)
-  const aX = ip + 410, barW = W - ip - aX - 90 - RIGHT_MARGIN;
-  let ay = y + 40;
-  attrs.forEach(([nm, val]) => {
-    ctx.fillStyle = '#2BD66A'; ctx.font = `900 50px ${FONT}`; ctx.textAlign = 'right';
-    ctx.fillText(String(val), aX + 60, ay + 20);
-    ctx.fillStyle = '#AEB8DC'; ctx.font = `800 23px ${FONT}`; ctx.textAlign = 'left';
-    ctx.fillText(nm.toUpperCase(), aX + 90, ay - 4);
-    const barY = ay + 14, barX = aX + 90, bw = barW;
-    roundRect(ctx, barX, barY, bw, 11, 5);
-    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fill();
-    const fillGrad = ctx.createLinearGradient(barX, 0, barX + bw, 0);
-    fillGrad.addColorStop(0, '#2BD66A'); fillGrad.addColorStop(1, '#4CD7D0');
-    roundRect(ctx, barX, barY, bw * (val/100), 11, 5);
-    ctx.fillStyle = fillGrad; ctx.fill();
-    ay += 112;
+  // ===================== NOME =====================
+  ['.pc-name .fam', '.pc-name .first', '.pc-name .team'].forEach(sel => {
+    const el = cardEl.querySelector(sel); if (el && txt(el)) drawText(el, { align: 'center' });
   });
-  y += 540;
 
-  // FOOTER
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#7A86B0'; ctx.font = `800 26px ${FONT}`;
-  ctx.fillText('A B R U Z Z O T R A I L R U N . I T', cx, y);
-  y += 44;
-  ctx.fillStyle = '#AEB8DC'; ctx.font = `400 28px ${FONT}`;
-  ctx.fillText('@abruzzotrailrunseries', cx, y);
+  // ===================== RANK =====================
+  const bigEl = cardEl.querySelector('.pc-rank .big');
+  if (bigEl) drawText(bigEl, { align: 'center', shadow: 'rgba(255,201,64,0.4)', blur: 28 });
+  const subEl = cardEl.querySelector('.pc-rank .sub');
+  if (subEl) drawText(subEl, { align: 'center' });
 
-  // esporta
+  // ===================== BOX PUNTI =====================
+  const ptsEl = cardEl.querySelector('.pc-pts');
+  if (ptsEl) {
+    const pr = rel(ptsEl), pst = cs(ptsEl), prad = px(pst.borderTopLeftRadius) * S;
+    roundRect(ctx, pr.x, pr.y, pr.w, pr.h, prad);
+    ctx.fillStyle = pst.backgroundColor; ctx.fill();
+    ctx.lineWidth = (px(pst.borderTopWidth) || 1) * S; ctx.strokeStyle = 'rgba(43,214,106,0.25)';
+    roundRect(ctx, pr.x, pr.y, pr.w, pr.h, prad); ctx.stroke();
+    const vEl = ptsEl.querySelector('.v');
+    if (vEl) drawText(vEl, { align: 'center', shadow: 'rgba(43,214,106,0.4)', blur: 16 });
+    const lEl = ptsEl.querySelector('.l');
+    if (lEl) {
+      const lr = rel(lEl), lst = cs(lEl);
+      ctx.font = `${lst.fontWeight} ${px(lst.fontSize) * S}px Figtree, sans-serif`;
+      ctx.fillStyle = lst.color; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      setLS(lEl);
+      const lines = [...lEl.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim()).map(n => n.textContent.trim().toUpperCase());
+      const lh = lr.h / Math.max(lines.length, 1);
+      lines.forEach((ln, i) => ctx.fillText(ln, lr.x, lr.y + lh * (i + 0.5)));
+      try { ctx.letterSpacing = '0px'; } catch (e) {}
+    }
+  }
+
+  // ===================== RADAR =====================
+  const radarSvg = cardEl.querySelector('.pc-radar svg');
+  if (radarSvg) {
+    const rr = rel(radarSvg);
+    const R = rr.w * (26 / 142); // raggio relativo al viewBox dell'SVG
+    const vals = [normalizedOverall(a), stats.competitivita, stats.costanza, stats.caratura, stats.partecipazione];
+    drawRadar(ctx, rr.x + rr.w / 2, rr.y + rr.h / 2, R, vals);
+  }
+
+  // ===================== ATTRIBUTI (numero + nome + barra) =====================
+  cardEl.querySelectorAll('.pc-attr').forEach(attr => {
+    const valEl = attr.querySelector('.val');
+    const nmEl = attr.querySelector('.nm');
+    const barEl = attr.querySelector('.bar');
+    const fillEl = attr.querySelector('.bar > i');
+    if (valEl) drawText(valEl, { align: 'right' });
+    if (nmEl) drawText(nmEl, { align: 'left' });
+    if (barEl) {
+      const br = rel(barEl), bst = cs(barEl);
+      const rad = Math.min(px(bst.borderTopLeftRadius) * S, br.h / 2);
+      roundRect(ctx, br.x, br.y, br.w, br.h, rad);
+      ctx.fillStyle = bst.backgroundColor || 'rgba(255,255,255,0.08)'; ctx.fill();
+      if (fillEl) {
+        const fr = rel(fillEl);
+        if (fr.w > 0.5) {
+          const fg = ctx.createLinearGradient(br.x, 0, br.x + br.w, 0);
+          fg.addColorStop(0, '#2BD66A'); fg.addColorStop(1, '#4CD7D0');
+          roundRect(ctx, fr.x, fr.y, fr.w, fr.h, rad);
+          ctx.save();
+          ctx.shadowColor = 'rgba(43,214,106,0.4)'; ctx.shadowBlur = 8 * S;
+          ctx.fillStyle = fg; ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+  });
+
+  // ===================== FOOTER =====================
+  const tagEl = cardEl.querySelector('.pc-foot .tag');
+  if (tagEl) drawText(tagEl, { align: 'center' });
+  const igEl = cardEl.querySelector('.pc-foot .ig');
+  if (igEl) drawText(igEl, { align: 'center' });
+
+  // ===================== ESPORTA =====================
   const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
-  const fileName = `ATRS_${(displayName||'atleta').replace(/\s+/g,'_')}.png`;
+  const fileName = `ATRS_${(displayName || 'atleta').replace(/\s+/g, '_')}.png`;
   const file = new File([blob], fileName, { type: 'image/png' });
 
   // mobile: condivisione nativa; desktop: download
@@ -2807,31 +2824,37 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 // helper: disegna il radar pentagonale sul canvas (per il PNG condivisibile)
-function drawRadarPentagon(ctx, cx, cy, R, values) {
+function drawRadar(ctx, cx, cy, R, values) {
   const labels = ['PUNTI', 'COMPET.', 'COSTANZA', 'CARATURA', 'PARTEC.'];
-  const pt = (i, frac) => { const ang = (-90 + i*72) * Math.PI/180; return [cx + R*frac*Math.cos(ang), cy + R*frac*Math.sin(ang)]; };
-  ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1.5;
-  [0.25,0.5,0.75,1].forEach(f => {
+  const pt = (i, frac) => { const ang = (-90 + i * 72) * Math.PI / 180; return [cx + R * frac * Math.cos(ang), cy + R * frac * Math.sin(ang)]; };
+  const sw = R / 26; // 1 unità di stroke nel viewBox SVG (R=26)
+  // gabbia + assi
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = sw;
+  [0.25, 0.5, 0.75, 1].forEach(f => {
     ctx.beginPath();
-    for (let i=0;i<5;i++){ const [x,y] = pt(i,f); i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); }
+    for (let i = 0; i < 5; i++) { const [x, y] = pt(i, f); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
     ctx.closePath(); ctx.stroke();
   });
-  for (let i=0;i<5;i++){ const [x,y] = pt(i,1); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x,y); ctx.stroke(); }
-  const vp = values.map((v,i) => pt(i, Math.max(v,2)/100));
+  for (let i = 0; i < 5; i++) { const [x, y] = pt(i, 1); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke(); }
+  // poligono valori
+  const vp = values.map((v, i) => pt(i, Math.max(v, 2) / 100));
   ctx.beginPath();
-  vp.forEach(([x,y],i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+  vp.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
   ctx.closePath();
-  const grad = ctx.createLinearGradient(cx-R, cy-R, cx+R, cy+R);
+  const grad = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
   grad.addColorStop(0, '#2BD66A'); grad.addColorStop(1, '#4CD7D0');
   ctx.fillStyle = grad; ctx.globalAlpha = 0.25; ctx.fill(); ctx.globalAlpha = 1;
-  ctx.strokeStyle = grad; ctx.lineWidth = 4;
-  ctx.shadowColor = 'rgba(43,214,106,0.5)'; ctx.shadowBlur = 12;
+  ctx.strokeStyle = grad; ctx.lineWidth = 2 * sw;
+  ctx.shadowColor = 'rgba(43,214,106,0.5)'; ctx.shadowBlur = 2.5 * sw;
   ctx.stroke(); ctx.shadowBlur = 0;
   ctx.fillStyle = '#2BD66A';
-  vp.forEach(([x,y]) => { ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill(); });
-  ctx.fillStyle = '#7A86B0'; ctx.font = '800 16px Figtree, sans-serif';
+  vp.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 2 * sw, 0, Math.PI * 2); ctx.fill(); });
+  // etichette (SVG: frac 1.5, font 5 su R=26, letter-spacing 0.3)
+  ctx.fillStyle = '#7A86B0'; ctx.font = `800 ${R * 5 / 26}px Figtree, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  labels.forEach((lb,i) => { const [x,y] = pt(i,1.36); ctx.fillText(lb, x, y); });
+  try { ctx.letterSpacing = (R * 0.3 / 26) + 'px'; } catch (e) {}
+  labels.forEach((lb, i) => { const [x, y] = pt(i, 1.5); ctx.fillText(lb, x, y); });
+  try { ctx.letterSpacing = '0px'; } catch (e) {}
   ctx.textBaseline = 'alphabetic';
 }
 
