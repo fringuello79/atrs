@@ -422,14 +422,9 @@ async function main(){
     const ptsPx=tr.pts.map(([la,lo])=>[lon2x(lo,DEM_Z)-px0, lat2y(la,DEM_Z)-py0]);
     const geo=routeWall(ptsPx, ROUTE_W, ROUTE_H, (x,y)=>zTop(x,y));
     if(!geo) continue;
-    const mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0xff4a4a,roughness:0.28,metalness:0.0,emissive:0xff1818,emissiveIntensity:1.25,side:THREE.DoubleSide}));
+    const mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0xff0000,roughness:0.32,metalness:0.0,emissive:0xff0000,emissiveIntensity:0.95,side:THREE.DoubleSide}));
     mesh.userData.name=tr.name; mesh.castShadow=true; mesh.receiveShadow=false;
     scene.add(mesh); routeMeshes.push(mesh);
-    // --- alone neon: due gusci additivi (stretto intenso + largo morbido) ---
-    const glow1=routeWall(ptsPx, ROUTE_W*2.1, ROUTE_H*1.14, (x,y)=>zTop(x,y));
-    if(glow1){ const g1=new THREE.Mesh(glow1,new THREE.MeshBasicMaterial({color:0xff2a2a,transparent:true,opacity:0.42,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide})); g1.renderOrder=2; scene.add(g1); }
-    const glow2=routeWall(ptsPx, ROUTE_W*4.0, ROUTE_H*1.3, (x,y)=>zTop(x,y));
-    if(glow2){ const g2=new THREE.Mesh(glow2,new THREE.MeshBasicMaterial({color:0xff3030,transparent:true,opacity:0.18,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide})); g2.renderOrder=1; scene.add(g2); }
     // ombra morbida a terra: nastro scuro trasparente sfalsato nella direzione della luce
     const sh=routeWall(ptsPx, ROUTE_W*1.7, 0.02, (x,y)=>zTop(x,y));
     if(sh){ const shm=new THREE.Mesh(sh,new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.20,depthWrite:false}));
