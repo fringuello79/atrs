@@ -20,7 +20,7 @@
     color:#06253F;background:linear-gradient(90deg,#4CD7D0,#2BD66A);padding:10px 16px;border-radius:12px;
     box-shadow:0 5px 14px rgba(0,0,0,.4);transition:transform .12s}
   #home:hover{transform:translateY(-1px)} #home:active{transform:scale(.97)}
-  #logo{position:fixed;top:14px;right:16px;width:74px;height:auto;z-index:6;filter:drop-shadow(0 3px 8px rgba(0,0,0,.45));opacity:.96}
+  #logo{position:fixed;top:12px;right:14px;width:74px;height:auto;z-index:8;padding:7px 9px;border-radius:13px;background:rgba(10,20,48,0.42);box-shadow:0 4px 14px rgba(0,0,0,.4);filter:drop-shadow(0 1px 3px rgba(0,0,0,.4))}
   #hint{position:fixed;top:12px;left:50%;transform:translateX(-50%);color:rgba(232,220,200,.35);font-size:10.5px;letter-spacing:.4px;z-index:5;transition:opacity 1.2s;pointer-events:none}
   #err{position:fixed;inset:auto 16px 16px 16px;background:#5a1a1a;color:#fff;padding:12px 16px;border-radius:10px;display:none;z-index:20;font-size:13px}
 </style>
@@ -279,12 +279,13 @@ async function main(){
   const bil=bilinF(Hgt);
   const zTop=(x,y)=>Math.max(bil(x,y),0)*EX/1000;
 
-  const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true});
+  const renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:true,alpha:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.setSize(innerWidth,innerHeight);
   renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure=1.06;
+  renderer.setClearColor(0x000000,0);
   renderer.shadowMap.enabled=true;
   renderer.shadowMap.type=THREE.PCFSoftShadowMap;
   const scene=new THREE.Scene();
@@ -524,8 +525,18 @@ async function main(){
   ped.position.set((bx0+bx1)/2,(by0+by1)/2,-SLAB-PD/2);
   ped.receiveShadow=true; ped.castShadow=true;
   scene.add(ped);
-  const table=new THREE.Mesh(new THREE.PlaneGeometry(PW*4,PH*4),
-    new THREE.MeshStandardMaterial({color:0x2a180c,roughness:0.9}));
+  // piano erboso su cui poggia il piedistallo (micro-variazione di tono)
+  const grassCv=document.createElement('canvas'); grassCv.width=grassCv.height=512;
+  const gxx=grassCv.getContext('2d');
+  gxx.fillStyle='#5FA24E'; gxx.fillRect(0,0,512,512);
+  let gseed=13; const grnd=()=>(gseed=(gseed*16807)%2147483647)/2147483647;
+  for(let k=0;k<9000;k++){ const x=grnd()*512,y=grnd()*512,dk=(grnd()-0.5)*0.22;
+    gxx.fillStyle='rgba('+Math.round(95*(1+dk))+','+Math.round(162*(1+dk*0.7))+','+Math.round(78*(1+dk))+',0.5)';
+    gxx.fillRect(x,y,2,2); }
+  const grassTex=new THREE.CanvasTexture(grassCv); grassTex.colorSpace=THREE.SRGBColorSpace;
+  grassTex.wrapS=grassTex.wrapT=THREE.RepeatWrapping; grassTex.repeat.set(6,6);
+  const table=new THREE.Mesh(new THREE.PlaneGeometry(PW*6,PH*6),
+    new THREE.MeshStandardMaterial({map:grassTex,roughness:0.95,metalness:0}));
   table.position.set((bx0+bx1)/2,(by0+by1)/2,-SLAB-PD-0.02);
   table.receiveShadow=true; scene.add(table);
 
